@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JNCT College Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+    .input-field { border: 1px solid #cbd5e1; transition: all 0.2s; outline: none; }
+    .input-field:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+    .btn-primary { background-color: #2563eb; color: white; }
+    .btn-primary:hover { background-color: #1d4ed8; }
+    .dynamic-row { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+ </head>
+ <body class="h-full bg-slate-50">
+  <div id="app" class="w-full h-full overflow-auto"></div>
+  <script>
+    const config = { bg: "#f8fafc", surface: "#ffffff", text: "#1e293b", primary: "#2563eb" };
+
+    let currentRecords = [];
+    let currentView = 'welcome'; 
+    let currentUser = null;
+    let adminDept = ""; 
+    let isEditing = false;
+    let forgotEmail = "";
+
+    async function fetchStudents() {
+        try {
+            const url = adminDept ? `/api/students?department=${encodeURIComponent(adminDept)}` : '/api/students';
+            const res = await fetch(url);
+            currentRecords = await res.json();
+            if(currentView === 'admin-dashboard') renderAdminDashboard();
+        } catch (e) { console.error(e); }
+    }
+    
+    function renderCurrentView() {
+      if(currentView==='welcome') renderWelcome();
+      else if(currentView==='admin-login') renderAdminLogin();
+      else if(currentView==='admin-register') renderAdminRegister();
+      else if(currentView==='admin-dashboard') renderAdminDashboard();
+      else if(currentView==='student-login') renderStudentLogin();
+      else if(currentView==='student-dashboard') renderStudentDashboard();
+      else if(currentView==='forgot-password') renderForgotPassword();
+      else if(currentView==='verify-otp') renderVerifyOTP();
+    }
+
+    // --- WELCOME ---
+    function renderWelcome() {
+      document.getElementById('app').innerHTML = `
+        <div class="flex h-full items-center justify-center bg-slate-50">
+          <div class="max-w-lg w-full p-8 text-center">
+            <div class="text-6xl mb-4 text-blue-600">🏛️</div>
+            <h1 class="text-3xl font-bold text-slate-800 mb-2">JNCT College Portal</h1>
+            <p class="text-slate-500 mb-8">Official Academic Records System</p>
+            <div class="bg-white p-8 rounded-xl card-shadow border border-slate-200">
+              <button onclick="currentView='admin-login';renderCurrentView()" class="w-full btn-primary p-3 rounded-lg font-bold mb-3 shadow-sm">🔐 HOD / Admin Login</button>
+              <button onclick="currentView='student-login';renderCurrentView()" class="w-full bg-white text-slate-700 border border-slate-300 p-3 rounded-lg font-bold hover:bg-slate-50">🎓 Student Login</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // --- ADMIN REGISTER ---
+    function renderAdminRegister() {
+        document.getElementById('app').innerHTML = `
+        <div class="flex h-full items-center justify-center bg-slate-50">
+          <div class="bg-white p-10 rounded-xl card-shadow w-96 border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-4 text-center">Register JNCT Dept</h2>
+            <input id="reg-email" placeholder="HOD Email (Gmail)" class="w-full p-3 mb-3 input-field rounded-lg">
+            <input id="reg-pass" type="password" placeholder="Set Login Password" class="w-full p-3 mb-3 input-field rounded-lg">
+            <input id="reg-dept" placeholder="Dept Name (e.g. CSE, AIML)" class="w-full p-3 mb-4 input-field rounded-lg">
+            <button onclick="doRegister()" class="w-full btn-primary p-3 rounded-lg font-bold shadow-sm">Register</button>
+            <button onclick="currentView='admin-login';renderCurrentView()" class="w-full mt-4 text-slate-400 text-sm hover:text-slate-600">Back to Login</button>
+          </div>
+        </div>`;
+    }
+
+    async function doRegister() {
+        const email = document.getElementById('reg-email').value;
+        const pass = document.getElementById('reg-pass').value;
+        const dept = document.getElementById('reg-dept').value;
+        
+        if(!email || !pass || !dept) return alert("All fields are required");
+
+        const res = await fetch('/api/admin/register', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({email, password:pass, department:dept})
+        });
+        const d = await res.json();
+        if(res.ok) { alert(d.message); currentView='admin-login'; renderCurrentView(); }
+        else alert(d.error);
+    }
+
+    // --- ADMIN LOGIN ---
+    function renderAdminLogin() {
+      document.getElementById('app').innerHTML = `
+        <div class="flex h-full items-center justify-center bg-slate-50">
+          <div class="bg-white p-10 rounded-xl card-shadow w-96 border border-slate-200">
+            <h2 class="text-2xl font-bold text-slate-800 mb-6 text-center">JNCT HOD Access</h2>
+            <input type="email" id="ap-email" placeholder="Email" class="w-full p-3 mb-3 input-field rounded-lg">
+            <input type="password" id="ap-pass" placeholder="Password" class="w-full p-3 mb-4 input-field rounded-lg">
+            <button onclick="attemptAdminLogin()" class="w-full btn-primary p-3 rounded-lg font-bold shadow-sm">Login</button>
+            <div class="mt-4 text-center">
+                <button onclick="currentView='admin-register';renderCurrentView()" class="text-sm text-blue-600 font-bold hover:underline">Register New Dept?</button>
+            </div>
+            <div class="mt-2 flex justify-between text-sm">
+                <button onclick="currentView='welcome';renderCurrentView()" class="text-slate-400 hover:text-slate-600">Back</button>
+                <button onclick="currentView='forgot-password';renderCurrentView()" class="text-blue-600 hover:text-blue-800 font-semibold">Forgot Password?</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function attemptAdminLogin() {
+        const email = document.getElementById('ap-email').value;
+        const pass = document.getElementById('ap-pass').value;
+        const res = await fetch('/api/admin/login', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({email: email, password: pass})
+        });
+        const d = await res.json();
+        if(res.ok) { 
+            adminDept = d.department; 
+            await fetchStudents();
+            currentView='admin-dashboard'; renderCurrentView(); 
+        }
+        else { alert("Incorrect Credentials"); }
+    }
+
+    // --- ADMIN DASHBOARD ---
+    function renderAdminDashboard() {
+      document.getElementById('app').innerHTML = `
+        <div class="min-h-full p-8 bg-slate-50">
+          <div class="max-w-7xl mx-auto">
+            <div class="flex flex-wrap justify-between items-center mb-8 bg-white p-6 rounded-xl border border-slate-200 card-shadow">
+              <div>
+                  <h1 class="text-2xl font-bold text-slate-800">JNCT College (${adminDept})</h1>
+                  <p class="text-slate-500 text-sm">Managing Department Records</p>
+              </div>
+              <div class="flex gap-2 flex-wrap mt-2 sm:mt-0">
+                <input type="file" id="xls" hidden onchange="uploadXls(this)">
+                <button onclick="document.getElementById('xls').click()" class="bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg font-semibold hover:bg-slate-50 text-sm">📤 Upload Excel</button>
+                <button onclick="fetch('/api/open-excel')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-emerald-700 shadow-sm text-sm">📊 Open Excel</button>
+                <button onclick="sendAllEmails()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 shadow-sm text-sm">📧 Email All</button>
+                <button onclick="currentView='welcome';renderCurrentView()" class="bg-red-50 text-red-500 border border-red-200 px-4 py-2 rounded-lg font-semibold hover:bg-red-100 text-sm">Logout</button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div class="bg-white p-6 rounded-xl border border-slate-200 card-shadow h-fit">
+                <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
+                    <h2 class="text-lg font-bold text-slate-800" id="form-title">New Admission</h2>
+                    <button onclick="resetForm()" id="cancel-btn" class="hidden text-xs text-red-500 hover:text-red-700 font-semibold">Cancel</button>
+                </div>
+                <form id="st-form" class="flex flex-col gap-3">
+                   <div class="flex gap-2">
+                       <input id="nm" placeholder="Student Name" class="w-1/2 p-2 input-field rounded bg-slate-50" required>
+                       <input id="en" placeholder="Enrollment No" class="w-1/2 p-2 input-field rounded bg-slate-50" required>
+                   </div>
+                   <input id="em" type="email" placeholder="Email Address" class="p-2 input-field rounded bg-slate-50" required>
+                   <input id="pw" placeholder="Login Password" class="p-2 input-field rounded bg-slate-50" required>
+                   <div class="flex gap-2">
+                       <input id="co" placeholder="Course" class="w-1/2 p-2 input-field rounded bg-slate-50">
+                       <input id="sm" placeholder="Semester" class="w-1/2 p-2 input-field rounded bg-slate-50">
+                   </div>
+                   <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                       <div class="flex justify-between text-sm font-bold text-slate-600 mb-2"><span>Subjects</span><button type="button" onclick="addSubRow()" class="text-blue-600 hover:text-blue-800">+ Add Subject</button></div>
+                       <div id="sub-box"></div>
+                   </div>
+                   <div class="flex gap-2">
+                       <input type="number" id="at" placeholder="Att (10)" class="w-1/3 p-2 input-field rounded bg-slate-50">
+                       <input type="number" id="it" placeholder="Int (50)" class="w-1/3 p-2 input-field rounded bg-slate-50">
+                       <input type="number" id="pr" placeholder="Proj (50)" class="w-1/3 p-2 input-field rounded bg-slate-50">
+                   </div>
+                   <button type="submit" id="save-btn" class="btn-primary py-3 rounded-lg font-bold shadow-md mt-2 transition">Save Record</button>
+                </form>
+              </div>
+
+              <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 card-shadow">
+                <div class="flex justify-between mb-4 border-b border-slate-100 pb-2">
+                    <h2 class="text-lg font-bold text-slate-800">Student Directory</h2>
+                    <span class="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold text-slate-600">Total: ${currentRecords.length}</span>
+                </div>
+                <div id="list-box" class="space-y-3"></div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      if(!document.getElementById('sub-box').hasChildNodes()) addSubRow();
+      renderList();
+      document.getElementById('st-form').addEventListener('submit', saveStudent);
+    }
+
+    function addSubRow(name='', ex='', int='') {
+        const d = document.createElement('div'); d.className="flex gap-2 mb-2 dynamic-row";
+        d.innerHTML=`<input class="sn w-1/2 p-2 text-sm input-field rounded" placeholder="Subject" value="${name}"><input type="number" class="se w-1/4 p-2 text-sm input-field rounded" placeholder="Ex" value="${ex}"><input type="number" class="si w-1/4 p-2 text-sm input-field rounded" placeholder="In" value="${int}"><button type="button" onclick="this.parentElement.remove()" class="text-red-400 font-bold px-2 hover:text-red-600">✕</button>`;
+        document.getElementById('sub-box').appendChild(d);
+    }
+    
+    function renderList() {
+        const box = document.getElementById('list-box');
+        if(currentRecords.length===0) { box.innerHTML='<div class="text-center text-slate-400 py-10 bg-slate-50 rounded border border-dashed border-slate-300">No records found.</div>'; return; }
+        box.innerHTML = currentRecords.map(s => {
+            let th=0; s.subjects.forEach(x=>th+=x.exam+x.internal);
+            const tot = th + s.attendance_marks + s.internship_marks + s.project_marks;
+            const pass = (tot/((s.subjects.length*100)+110))*100 >= 40;
+            return `<div class="bg-white border border-slate-200 p-4 rounded-lg flex justify-between items-center border-l-4 ${pass?'border-emerald-500':'border-red-500'} shadow-sm hover:shadow-md transition">
+              <div>
+                  <h3 class="font-bold text-slate-800 text-lg">${s.student_name}</h3>
+                  <p class="text-xs text-slate-500 font-semibold">${s.enrollment_number} | ${s.course}</p>
+                  <p class="text-xs text-slate-400">${s.email}</p>
+              </div>
+              <div class="text-right">
+                <div class="text-xl font-bold ${pass?'text-emerald-600':'text-red-600'}">${tot} Marks</div>
+                <div class="flex gap-2 mt-2 justify-end">
+                  <button onclick="editStudent('${s.id}')" class="text-xs bg-slate-50 text-slate-600 px-3 py-1 rounded border border-slate-200 hover:bg-slate-100 font-semibold transition">✏️</button>
+                  <button onclick="emailOne('${s.id}')" class="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded border border-indigo-100 hover:bg-indigo-100 font-semibold transition">📧</button>
+                  <button onclick="delStudent('${s.id}')" class="text-xs bg-red-50 text-red-500 px-3 py-1 rounded border border-red-100 hover:bg-red-100 font-semibold transition">🗑️</button>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function saveStudent(e) {
+        e.preventDefault();
+        const subs = [];
+        document.querySelectorAll('#sub-box > div').forEach(r => {
+            const n=r.querySelector('.sn').value; if(n) subs.push({name:n, exam:+r.querySelector('.se').value||0, internal:+r.querySelector('.si').value||0});
+        });
+        const body = {
+            id: isEditing ? document.getElementById('st-form').dataset.id : Date.now().toString(),
+            student_name: document.getElementById('nm').value,
+            enrollment_number: document.getElementById('en').value,
+            email: document.getElementById('em').value,
+            password: document.getElementById('pw').value,
+            department: adminDept, 
+            course: document.getElementById('co').value,
+            semester: document.getElementById('sm').value,
+            attendance_marks: +document.getElementById('at').value||0,
+            internship_marks: +document.getElementById('it').value||0,
+            project_marks: +document.getElementById('pr').value||0,
+            subjects: subs
+        };
+        const btn = document.getElementById('save-btn'); 
+        btn.textContent="Processing...";
+        await fetch('/api/students', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        resetForm(); await fetchStudents();
+        btn.textContent = "Save Record";
+    }
+
+    function editStudent(id) {
+        const s = currentRecords.find(r=>r.id===id); if(!s) return;
+        isEditing = true;
+        document.getElementById('form-title').textContent = "Edit Student";
+        document.getElementById('save-btn').textContent = "Update";
+        document.getElementById('cancel-btn').classList.remove('hidden');
+        document.getElementById('st-form').dataset.id = s.id;
+        document.getElementById('nm').value = s.student_name;
+        document.getElementById('en').value = s.enrollment_number;
+        document.getElementById('en').readOnly = true;
+        document.getElementById('em').value = s.email;
+        document.getElementById('pw').value = s.password;
+        document.getElementById('co').value = s.course;
+        document.getElementById('sm').value = s.semester;
+        document.getElementById('at').value = s.attendance_marks;
+        document.getElementById('it').value = s.internship_marks;
+        document.getElementById('pr').value = s.project_marks;
+        const box = document.getElementById('sub-box'); box.innerHTML='';
+        s.subjects.forEach(sub => addSubRow(sub.name, sub.exam, sub.internal));
+    }
+
+    function resetForm() {
+        isEditing = false;
+        document.getElementById('st-form').reset();
+        document.getElementById('form-title').textContent = "New Admission";
+        document.getElementById('save-btn').textContent = "Save Record";
+        document.getElementById('cancel-btn').classList.add('hidden');
+        document.getElementById('en').readOnly = false;
+        document.getElementById('sub-box').innerHTML=''; addSubRow();
+    }
+    
+    async function delStudent(id) { if(confirm("Delete?")) { await fetch(`/api/students/${id}`, {method:'DELETE'}); await fetchStudents(); } }
+    
+    async function uploadXls(inp) {
+        if(!inp.files[0]) return;
+        const fd = new FormData(); 
+        fd.append('file', inp.files[0]);
+        fd.append('department', adminDept); 
+        alert("Processing Excel...");
+        const res = await fetch('/api/upload-excel', {method:'POST', body:fd});
+        const d = await res.json();
+        alert(d.message || d.error); await fetchStudents(); inp.value='';
+    }
+    
+    // --- SMART EMAIL FUNCTIONS (Fixes "Undefined" Error) ---
+    async function emailOne(id) {
+        if(!confirm("Are you sure you want to email result?")) return;
+        
+        try {
+            const res = await fetch(`/api/send-marksheet/${id}`, {method:'POST'});
+            
+            // Check content type to handle non-JSON crashes
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const d = await res.json();
+                if(res.ok) alert("✅ " + d.message);
+                else alert("❌ Error: " + d.error);
+            } else {
+                const text = await res.text();
+                alert("⚠️ Server Crash (Not JSON): " + text.substring(0, 100)); 
+            }
+        } catch (err) {
+            alert("❌ Network/Code Error: " + err);
+        }
+    }
+
+    async function sendAllEmails() {
+        if(!confirm(`Send emails to ALL ${currentRecords.length} students?`)) return;
+        alert("🚀 Sending started in background... check alerts.");
+        
+        let success = 0;
+        let fail = 0;
+
+        for(const s of currentRecords) {
+            try {
+                const res = await fetch(`/api/send-marksheet/${s.id}`, {method:'POST'});
+                if(res.ok) {
+                    console.log(`✅ Sent to ${s.student_name}`);
+                    success++;
+                } else {
+                    console.error(`❌ Failed for ${s.student_name}`);
+                    fail++;
+                }
+            } catch(e) { console.error(e); fail++; }
+            
+            // Wait 1 second between emails to be safe
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        alert(`Process Complete!\n✅ Sent: ${success}\n❌ Failed: ${fail}`);
+    }
+
+    // --- FORGOT PASSWORD ---
+    function renderForgotPassword(){ document.getElementById('app').innerHTML=`<div class="flex h-full items-center justify-center bg-slate-50"><div class="bg-white p-10 rounded-xl card-shadow w-96"><h2 class="font-bold text-center mb-4">Reset Password</h2><input id="fp-email" class="w-full p-3 mb-4 input-field" placeholder="HOD Email"><button onclick="sendOTP()" class="w-full btn-primary p-3 rounded font-bold">Send OTP</button><button onclick="currentView='admin-login';renderCurrentView()" class="w-full mt-4 text-center text-gray-400">Cancel</button></div></div>`; }
+    async function sendOTP(){ const e=document.getElementById('fp-email').value; const res=await fetch('/api/admin/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e})}); if(res.ok){forgotEmail=e;currentView='verify-otp';renderCurrentView();}else alert("Error: Email not found"); }
+    function renderVerifyOTP(){ document.getElementById('app').innerHTML=`<div class="flex h-full items-center justify-center bg-slate-50"><div class="bg-white p-10 rounded-xl card-shadow w-96"><h2 class="font-bold text-center mb-4">Set Password</h2><input id="otp" class="w-full p-3 mb-2 input-field" placeholder="OTP"><input id="np" type="password" class="w-full p-3 mb-4 input-field" placeholder="New Password"><button onclick="doReset()" class="w-full btn-primary p-3 rounded font-bold">Update</button></div></div>`; }
+    async function doReset(){ const o=document.getElementById('otp').value, p=document.getElementById('np').value; const res=await fetch('/api/admin/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:forgotEmail,otp:o,new_password:p})}); if(res.ok){alert("Success");currentView='admin-login';renderCurrentView();}else alert("Invalid"); }
+
+    // --- STUDENT LOGIN ---
+    function renderStudentLogin() {
+       document.getElementById('app').innerHTML = `<div class="flex h-full items-center justify-center bg-slate-50"><div class="bg-white p-10 rounded-xl card-shadow w-96 border border-slate-200">
+         <h2 class="text-xl font-bold mb-6 text-center text-slate-800">Student Portal</h2>
+         <input id="sle" placeholder="Enrollment Number" class="w-full p-3 mb-3 input-field rounded-lg">
+         <input id="slp" type="password" placeholder="Password" class="w-full p-3 mb-6 input-field rounded-lg">
+         <button onclick="sl()" class="w-full btn-primary p-3 rounded-lg font-bold shadow-md">View Result</button>
+         <button onclick="currentView='welcome';renderCurrentView()" class="w-full mt-4 text-slate-400 text-sm hover:text-slate-600">Back</button>
+       </div></div>`;
+    }
+    async function sl() {
+        const e = document.getElementById('sle').value, p = document.getElementById('slp').value;
+        const res = await fetch('/api/students'); 
+        const allStudents = await res.json();
+        const u = allStudents.find(r => r.enrollment_number === e && r.password === p);
+        if(u) { currentUser=u; currentView='student-dashboard'; renderCurrentView(); } 
+        else alert("Invalid Credentials");
+    }
+    
+    function renderStudentDashboard() {
+        if(!currentUser) return;
+        let rows = currentUser.subjects.map(x=>`<div class="flex justify-between py-3 border-b border-slate-100 text-slate-600"><span>${x.name}</span><span class="text-sm">Th:${x.exam} | In:${x.internal} | <b class="text-slate-900">Total:${x.exam+x.internal}</b></span></div>`).join('');
+        
+        document.getElementById('app').innerHTML = `<div class="p-8 flex justify-center bg-slate-50 min-h-full"><div class="w-full max-w-2xl bg-white p-10 rounded-xl card-shadow border border-slate-200">
+           <div class="flex justify-between mb-8 border-b border-slate-100 pb-4">
+               <div><h2 class="text-2xl font-bold text-slate-800">JNCT College (${currentUser.department})</h2><p class="text-slate-500">${currentUser.student_name} | ${currentUser.enrollment_number}</p></div>
+               <button onclick="currentView='welcome';renderCurrentView()" class="text-red-500 bg-red-50 px-3 py-1 rounded h-fit hover:bg-red-100 font-bold text-sm">Logout</button>
+           </div>
+           <h3 class="text-blue-600 font-bold uppercase text-xs tracking-wider mb-3">Academic Performance</h3>
+           <div class="bg-slate-50 p-6 rounded-lg mb-6 border border-slate-200">${rows}</div>
+           <div class="grid grid-cols-2 gap-4 text-center mb-6"><div class="bg-slate-100 p-4 rounded-lg font-bold">Att: ${currentUser.attendance_marks} | Int: ${currentUser.internship_marks}</div><div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100 text-emerald-700 font-bold text-lg">Total: ${currentUser.subjects.reduce((a,b)=>a+b.exam+b.internal,0) + currentUser.attendance_marks + currentUser.internship_marks + currentUser.project_marks}</div></div>
+           
+           <button class="w-full btn-primary py-3 rounded-lg font-bold shadow-md" onclick="downloadMarksheet('${currentUser.id}')">Download Marksheet</button>
+        </div></div>`;
+    }
+
+    function downloadMarksheet(id){
+        window.location.href = `/api/download-marksheet/${id}`;
+    } 
+
+    currentView = 'welcome';
+    renderCurrentView();
+  </script>
+ </body>
+</html>
